@@ -1,0 +1,69 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Simple UPI QR Payment</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="container">
+    <h1>Scan & Pay</h1>
+
+    <label>Amount (INR):</label>
+    <input id="amount" type="number" value="10" step="0.01" min="1">
+
+    <button id="gen">Generate QR</button>
+
+    <div id="qr-area" class="hidden">
+      <h3>Scan this QR with FamPay / any UPI app</h3>
+      <img id="qr-img" src="" alt="QR">
+      <p id="order">Order: <span id="order-id"></span></p>
+      <p id="status">Status: <span id="status-text">created</span></p>
+      <div id="success" class="hidden">✅ Payment Done ✔</div>
+    </div>
+
+    <div class="note">
+      <strong>Testing:</strong> After scanning and paying, either use the webhook simulator:
+      <code>POST /webhook {"order_id":"...","status":"success"}</code>
+      or click the manual "Mark Paid" button below.
+    </div>
+
+    <button id="mark-paid" class="hidden">Mark Paid (demo)</button>
+
+  </div>
+
+<script>
+let pollInterval = null;
+document.getElementById('gen').addEventListener('click', async () => {
+  const amount = parseFloat(document.getElementById('amount').value) || 10;
+  const res = await fetch('/create_order', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({amount})
+  });
+  const data = await res.json();
+  document.getElementById('qr-img').src = data.qr_url;
+  document.getElementById('order-id').innerText = data.order_id;
+  document.getElementById('status-text').innerText = 'created';
+  document.getElementById('qr-area').classList.remove('hidden');
+  document.getElementById('mark-paid').classList.remove('hidden');
+
+  if (pollInterval) clearInterval(pollInterval);
+  pollInterval = setInterval(async () => {
+    const s = await fetch('/check_status/' + data.order_id).then(r=>r.json());
+    document.getElementById('status-text').innerText = s.status;
+    if (s.status === 'paid') {
+      document.getElementById('success').classList.remove('hidden');
+      clearInterval(pollInterval);
+    }
+  }, 2000);
+});
+
+document.getElementById('mark-paid').addEventListener('click', async () => {
+  const orderId = document.getElementById('order-id').innerText;
+  if (!orderId) return alert('Generate order first');
+  await fetch('/mark_paid/' + orderId, {method:'POST'});
+});
+</script>
+</body>
+</html>
